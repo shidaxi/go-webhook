@@ -216,8 +216,9 @@ helm install go-webhook deploy/helm/go-webhook/ \
 
 Tag `v*` triggers GitHub Actions:
 1. Run tests
-2. GoReleaser builds binaries (darwin/linux x amd64/arm64) + Docker multi-arch image
-3. Helm chart packaged and pushed as OCI to ghcr.io
+2. GoReleaser builds binaries (darwin/linux x amd64/arm64) → GitHub Release
+3. Docker multi-arch image (linux/amd64, linux/arm64) built and pushed to ghcr.io
+4. Helm chart packaged and pushed as OCI to ghcr.io
 
 ## Development
 

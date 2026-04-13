@@ -117,8 +117,10 @@ go run . validate --rules configs/rules.yaml
 - Mocks: HTTP via `httptest.NewServer`, Expr via `test/fixtures/` payloads
 
 ### CI/CD
-- Tag `v*` triggers GoReleaser → 4 binaries (darwin/linux × amd64/arm64) + Docker multi-arch + Helm chart → all pushed to ghcr.io
-- Dockerfile: `golang:1.26-alpine` build → `distroless/static-debian12` runtime
+- Tag `v*` triggers 4 parallel-after-test jobs: test → release (GoReleaser) + docker + helm
+- **GoReleaser handles binaries only** — 4 binaries (darwin/linux × amd64/arm64) + GitHub Release + checksums. GoReleaser must NOT build or push Docker images (no `dockers` / `docker_manifests` sections in `.goreleaser.yaml`)
+- **Docker image built in a separate CI job** using `docker/build-push-action` with multi-platform (`linux/amd64,linux/arm64`), GHA cache, and `docker/metadata-action` for tags
+- **Dockerfile must use multi-stage build**: `golang:1.26-alpine` builder → `distroless/static-debian12` runtime. This ensures reproducible builds independent of GoReleaser's build context
 
 ### Helm Chart
 - Source at `deploy/helm/go-webhook/`; CI auto-replaces Chart.yaml version/appVersion
@@ -149,7 +151,8 @@ go run . validate --rules configs/rules.yaml
 - `/admin/config` must not return plaintext secrets
 - `docs/` is swag-generated; do not edit manually
 - Helm chart must not hardcode image tag; use `{{ .Values.image.tag | default .Chart.AppVersion }}`
-- `.goreleaser.yaml` must not hardcode version numbers
+- `.goreleaser.yaml` must not hardcode version numbers or contain `dockers`/`docker_manifests` sections
+- Dockerfile must not use single-stage (COPY binary only) pattern; always use multi-stage build from source
 - `tmp/` must not be committed to git
 - Do not write non-test files under `internal/` before RED phase is confirmed
 - Tests must only use `make test` / `make e2e`; do not run `go test` directly
