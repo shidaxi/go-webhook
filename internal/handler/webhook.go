@@ -23,7 +23,15 @@ func NewWebhookHandler(store *engine.RuleStore) *WebhookHandler {
 }
 
 // Handle processes an incoming webhook request.
-// It matches against all loaded rules, transforms, and dispatches.
+// @Summary      Receive and forward webhook
+// @Description  Receives a JSON payload, matches against loaded rules, transforms the body, and dispatches to target URLs.
+// @Tags         webhook
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object  true  "Incoming webhook JSON payload"
+// @Success      200  {object}  WebhookResponse
+// @Failure      400  {object}  ErrorResponse
+// @Router       /webhook [post]
 func (h *WebhookHandler) Handle(c *gin.Context) {
 	var payload map[string]any
 	if err := c.ShouldBindJSON(&payload); err != nil {

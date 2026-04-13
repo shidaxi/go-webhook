@@ -1,0 +1,152 @@
+basePath: /
+definitions:
+  handler.DispatchResult:
+    properties:
+      error:
+        example: ""
+        type: string
+      rule_name:
+        example: alertmanager-to-lark
+        type: string
+      status_code:
+        example: 200
+        type: integer
+      success:
+        example: true
+        type: boolean
+      target_url:
+        example: https://open.larksuite.com/open-apis/bot/v2/hook/abc
+        type: string
+    type: object
+  handler.ErrorResponse:
+    properties:
+      code:
+        example: INVALID_BODY
+        type: string
+      error:
+        example: invalid JSON body
+        type: string
+    type: object
+  handler.HealthResponse:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  handler.RuleEntry:
+    properties:
+      compiled:
+        example: true
+        type: boolean
+      error:
+        type: string
+      match:
+        example: len(payload.alerts) > 0
+        type: string
+      method:
+        example: POST
+        type: string
+      name:
+        example: alertmanager-to-lark
+        type: string
+      target:
+        example: https://example.com
+        type: string
+    type: object
+  handler.RulesResponse:
+    properties:
+      rules:
+        items:
+          $ref: '#/definitions/handler.RuleEntry'
+        type: array
+    type: object
+  handler.WebhookResponse:
+    properties:
+      dispatched:
+        example: 1
+        type: integer
+      matched:
+        example: 1
+        type: integer
+      results:
+        items:
+          $ref: '#/definitions/handler.DispatchResult'
+        type: array
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Configurable webhook forwarding engine. Receives JSON webhooks, transforms
+    payloads using expr rules, and forwards to target services.
+  title: go-webhook API
+  version: 0.1.0
+paths:
+  /admin/config:
+    get:
+      description: Returns the runtime configuration as JSON. Sensitive fields (token,
+        secret, password, key) are redacted.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+      summary: Runtime configuration
+      tags:
+      - admin
+  /admin/healthz:
+    get:
+      description: Returns ok if the service is running.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.HealthResponse'
+      summary: Health check
+      tags:
+      - admin
+  /admin/rules:
+    get:
+      description: Returns all currently loaded webhook forwarding rules with compile
+        status.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.RulesResponse'
+      summary: List loaded rules
+      tags:
+      - admin
+  /webhook:
+    post:
+      consumes:
+      - application/json
+      description: Receives a JSON payload, matches against loaded rules, transforms
+        the body, and dispatches to target URLs.
+      parameters:
+      - description: Incoming webhook JSON payload
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.WebhookResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: Receive and forward webhook
+      tags:
+      - webhook
+swagger: "2.0"

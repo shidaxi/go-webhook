@@ -3,6 +3,9 @@ package server
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
 	"github.com/shidaxi/go-webhook/internal/config"
 	"github.com/shidaxi/go-webhook/internal/engine"
 	"github.com/shidaxi/go-webhook/internal/handler"
@@ -24,6 +27,9 @@ func NewAdminEngine(store *engine.RuleStore, cfg config.AppConfig) *gin.Engine {
 
 	// Prometheus metrics endpoint
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// Swagger UI
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	return r
 }

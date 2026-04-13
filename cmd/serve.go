@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/shidaxi/go-webhook/docs" // swagger docs
+
 	"github.com/shidaxi/go-webhook/internal/config"
 	"github.com/shidaxi/go-webhook/internal/engine"
 	"github.com/shidaxi/go-webhook/internal/logger"
