@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**go-webhook** — 可配置的 webhook 转发引擎。接收 JSON webhook，根据 YAML 规则用 expr 表达式引擎动态组装新 payload，HTTP 转发给目标服务。零代码实现 webhook 数据转换和路由。
+**go-webhook** — A configurable webhook forwarding engine. Receives JSON webhooks, matches against YAML rules using the expr expression engine to dynamically assemble new payloads, and forwards them via HTTP to target services. Zero-code webhook data transformation and routing.
 
 ## Tech Stack
 
@@ -10,41 +10,41 @@ Go 1.22+ | Gin | Cobra + Viper | expr-lang/expr | Zap | Prometheus | swaggo/swag
 
 ## Architecture
 
-### 双端口设计
+### Dual-Port Design
 
-业务端口 `:8080`（`server.port`）— webhook 接收转发。管理端口 `:9090`（`admin.port`）— 独立 Gin engine，承载：
+Business port `:8080` (`server.port`) — webhook receive and forward. Admin port `:9090` (`admin.port`) — separate Gin engine serving:
 
-- `GET /admin/config` — 运行时配置 JSON（脱敏）
-- `GET /admin/rules` — 当前规则列表（含编译状态）
-- `GET /admin/healthz` — 健康检查
+- `GET /admin/config` — runtime config JSON (sensitive fields redacted)
+- `GET /admin/rules` — current rule list (with compile status)
+- `GET /admin/healthz` — health check
 - `GET /metrics` — Prometheus
 - `GET /swagger/*` — Swagger UI
 
-两个 server 在 `serve` 命令中同时启动，graceful shutdown 同时关闭。
+Both servers start together in the `serve` command and shut down gracefully together.
 
-### 目录结构
+### Directory Structure
 
 ```
 go-webhook/
 ├── main.go
 ├── cmd/                         # Cobra: root.go, serve.go, validate.go
 ├── internal/
-│   ├── config/                  # Viper 初始化 + 规则加载 + 热重载 + 类型定义
+│   ├── config/                  # Viper init + rule loading + hot reload + type definitions
 │   ├── engine/                  # matcher, transformer, dispatcher, functions
-│   ├── handler/                 # webhook.go (业务), admin.go (管理)
-│   ├── server/                  # webhook.go / admin.go — 两个 Gin engine 初始化
+│   ├── handler/                 # webhook.go (business), admin.go (admin)
+│   ├── server/                  # webhook.go / admin.go — two Gin engine initializations
 │   ├── middleware/              # auth, logging, metrics
-│   ├── logger/                  # zap 封装，json/text 切换
-│   └── metrics/                 # Prometheus 指标定义
-├── docs/                        # swag init 自动生成，勿手动编辑
+│   ├── logger/                  # zap wrapper, json/text switching
+│   └── metrics/                 # Prometheus metric definitions
+├── docs/                        # swag init auto-generated, do not edit manually
 ├── configs/                     # config.yaml + rules.yaml
-├── test/fixtures/               # 测试 payload 样本
-├── test/e2e/                    # E2E 测试（make e2e）
+├── test/fixtures/               # test payload samples
+├── test/e2e/                    # E2E tests (make e2e)
 ├── deploy/helm/go-webhook/      # Helm chart
 ├── .github/workflows/release.yml
 ├── .goreleaser.yaml
 ├── .air.toml
-├── .vscode/launch.json          # 团队共享，纳入 git
+├── .vscode/launch.json          # shared across team, committed to git
 ├── Dockerfile
 └── Makefile
 ```
@@ -52,104 +52,104 @@ go-webhook/
 ## Key Commands
 
 ```bash
-make dev          # Air hot reload 开发模式
-make test         # 单元 + 集成测试 (-v -race -coverprofile)
-make e2e          # E2E 测试 (-tags=e2e)
-make build        # 构建 binary
-swag init -g main.go -o docs/   # 重新生成 Swagger
+make dev          # Air hot reload dev mode
+make test         # unit + integration tests (-v -race -coverprofile)
+make e2e          # E2E tests (-tags=e2e)
+make build        # build binary
+swag init -g main.go -o docs/   # regenerate Swagger docs
 go run . serve --config configs/config.yaml
 go run . validate --rules configs/rules.yaml
 ```
 
 ## Development Rules
 
-### Viper 配置
-- key 命名点分小写：`server.port`, `admin.port`, `log.format`, `rules.path`
-- 环境变量前缀 `GOWEBHOOK_`：`GOWEBHOOK_SERVER_PORT` → `server.port`
-- 优先级：flag > env > yaml > default。所有配置项必须有 default 值
-- 搜索路径：`./configs/`, `$HOME/.go-webhook/`, `/etc/go-webhook/`
-- config.yaml 热重载用 Viper WatchConfig，rules.yaml 用 fsnotify 单独监听
-- 重载原子替换规则集（atomic.Value），加载失败保留旧规则
+### Viper Configuration
+- Key naming: dot-separated lowercase: `server.port`, `admin.port`, `log.format`, `rules.path`
+- Env var prefix `GOWEBHOOK_`: `GOWEBHOOK_SERVER_PORT` → `server.port`
+- Priority: flag > env > yaml > default. All config keys must have a default value
+- Search paths: `./configs/`, `$HOME/.go-webhook/`, `/etc/go-webhook/`
+- config.yaml hot reload via Viper WatchConfig; rules.yaml watched separately via fsnotify
+- Reload atomically swaps rule set (atomic.Value); on load failure, retains previous rules
 
 ### Gin
-- 业务中间件顺序：Recovery → Logging → Metrics → Auth → Handler
-- 管理端口中间件：Recovery → Logging（轻量），不挂 auth
-- 统一错误响应：`{"error": "message", "code": "ERROR_CODE"}`
-- 用 `ShouldBindJSON()` 解析请求体
+- Business middleware order: Recovery → Logging → Metrics → Auth → Handler
+- Admin port middleware: Recovery → Logging (lightweight), no auth
+- Unified error response: `{"error": "message", "code": "ERROR_CODE"}`
+- Use `ShouldBindJSON()` to parse request body
 
 ### Admin API
-- `/admin/config` 必须脱敏：含 `token`/`secret`/`password`/`key` 的字段值替换为 `"******"`
-- admin 端口不暴露公网，通过网络策略限制访问
+- `/admin/config` must redact sensitive fields: values of keys containing `token`/`secret`/`password`/`key` replaced with `"******"`
+- Admin port must not be exposed publicly; restrict access via network policies
 
 ### Swagger
-- swaggo 注解写在 handler 函数上，生成到 `docs/`，纳入 git
-- CI 中校验 `swag init` 后无 diff
-- Swagger UI 挂管理端口：`adminRouter.GET("/swagger/*any", ginSwagger.WrapHandler(...))`
-- request/response 结构体定义在 `internal/handler/` 或 `internal/config/types.go`
+- swaggo annotations go on handler functions, generated to `docs/`, committed to git
+- CI validates no diff after `swag init`
+- Swagger UI mounted on admin port: `adminRouter.GET("/swagger/*any", ginSwagger.WrapHandler(...))`
+- Request/response structs defined in `internal/handler/` or `internal/config/types.go`
 
-### Zap 日志
-- `log.format`: `json`（默认，zap.NewProduction）或 `text`（zap.NewDevelopment）
-- 请求日志含：method, path, status, latency, client_ip, request_id
-- engine 日志用 `logger.With(zap.String("rule", ruleName))`
+### Zap Logging
+- `log.format`: `json` (default, zap.NewProduction) or `text` (zap.NewDevelopment)
+- Request logs include: method, path, status, latency, client_ip, request_id
+- Engine logs use `logger.With(zap.String("rule", ruleName))`
 
 ### Prometheus Metrics
-- 必须定义：`webhook_requests_total` (counter, labels: status/path), `webhook_request_duration_seconds` (histogram), `webhook_dispatch_total` (counter, labels: rule_name/target/status), `webhook_dispatch_duration_seconds` (histogram), `webhook_rules_loaded` (gauge)
-- 用 `promauto` 注册，指标常量集中在 `internal/metrics/`
+- Required metrics: `webhook_requests_total` (counter, labels: status/path), `webhook_request_duration_seconds` (histogram), `webhook_dispatch_total` (counter, labels: rule_name/target/status), `webhook_dispatch_duration_seconds` (histogram), `webhook_rules_loaded` (gauge)
+- Register with `promauto`; metric constants centralized in `internal/metrics/`
 
-### Expr 表达式
-- 加载时 Compile，运行时只 Run。内置函数：`now()`, `env()`, `lower()`, `upper()`, `join()`, `split()`
-- 求值错误不 panic，记日志跳过该规则
+### Expr Expressions
+- Compile at load time, only Run at runtime. Built-in functions: `now()`, `env()`, `lower()`, `upper()`, `join()`, `split()`
+- Evaluation errors must not panic; log and skip the rule
 
-### HTTP 转发
-- 默认超时 10s（规则可覆盖），指数退避重试 3 次（仅 5xx/网络错误）
-- 自定义 headers 支持 `{{env.VAR}}` 模板
+### HTTP Forwarding
+- Default timeout 10s (overridable per rule), exponential backoff retry 3 times (5xx/network errors only)
+- Custom headers support `{{env.VAR}}` template
 
-### TDD（ECC tdd-workflow）
-- 新功能和 bug 修复**必须** RED → GREEN → REFACTOR
-- RED：先写测试，`make test` 确认失败，原因是功能未实现而非环境问题。**RED 确认前不得写业务代码**
-- GREEN：最小实现，`make test` 确认全绿
-- REFACTOR：重构后 `make test` 仍绿
-- 每阶段 git checkpoint：`test: add <feature>` → `feat: implement <feature>` → `refactor: clean up <feature>`
-- 覆盖率：整体 80%+，`internal/engine/` 90%+
-- 单元测试（`*_test.go` 同目录）+ 集成测试（`//go:build integration`）→ `make test`
-- E2E 测试（`test/e2e/`，`-tags=e2e`）→ `make e2e`
-- **不要直接 `go test`**，Makefile 封装了正确的 flags
-- Mock：HTTP 用 `httptest.NewServer`，Expr 用 `test/fixtures/` payload
+### TDD (ECC tdd-workflow)
+- New features and bug fixes **must** follow RED → GREEN → REFACTOR
+- RED: write tests first, `make test` confirms failure due to missing implementation (not env issues). **Do not write production code before RED is confirmed**
+- GREEN: minimal implementation, `make test` confirms all pass
+- REFACTOR: refactor, `make test` still green
+- Git checkpoint per phase: `test: add <feature>` → `feat: implement <feature>` → `refactor: clean up <feature>`
+- Coverage: overall 80%+, `internal/engine/` 90%+
+- Unit tests (`*_test.go` colocated) + integration tests (`//go:build integration`) → `make test`
+- E2E tests (`test/e2e/`, `-tags=e2e`) → `make e2e`
+- **Do not run `go test` directly**; Makefile wraps the correct flags
+- Mocks: HTTP via `httptest.NewServer`, Expr via `test/fixtures/` payloads
 
 ### CI/CD
-- tag `v*` 触发 GoReleaser → 4 binary (darwin/linux × amd64/arm64) + Docker 多架构 + Helm chart → 全部推 ghcr.io
-- Dockerfile：`golang:1.22-alpine` 构建 → `distroless/static-debian12` 运行
+- Tag `v*` triggers GoReleaser → 4 binaries (darwin/linux × amd64/arm64) + Docker multi-arch + Helm chart → all pushed to ghcr.io
+- Dockerfile: `golang:1.22-alpine` build → `distroless/static-debian12` runtime
 
 ### Helm Chart
-- 源码 `deploy/helm/go-webhook/`，CI 自动替换 Chart.yaml version/appVersion
-- values.yaml 默认值与 config.yaml 一致，ConfigMap 挂载两份配置
-- 安装：`helm install go-webhook oci://ghcr.io/<owner>/charts/go-webhook --version <ver>`
+- Source at `deploy/helm/go-webhook/`; CI auto-replaces Chart.yaml version/appVersion
+- values.yaml defaults match config.yaml; ConfigMap mounts both config files
+- Install: `helm install go-webhook oci://ghcr.io/<owner>/charts/go-webhook --version <ver>`
 
 ### Air + VSCode
-- `make dev` = `air -c .air.toml`，监听 .go/.yaml，构建带 `-gcflags='all=-N -l'` 方便 debug
-- `.vscode/launch.json`：Launch 直接启动 + Attach to Air 进程。含 `GIN_MODE=debug`
+- `make dev` = `air -c .air.toml`, watches .go/.yaml, builds with `-gcflags='all=-N -l'` for debug
+- `.vscode/launch.json`: Launch directly + Attach to Air process. Includes `GIN_MODE=debug`
 
 ### README.md
-- README.md 是项目对外的入口文档，必须保持与代码同步
-- 内容包括：项目简介、功能特性、快速开始（安装/运行）、配置说明、规则编写示例、部署方式（Docker/Helm）、开发指南（make 命令）、API 端点列表
-- 代码变更涉及以下情况时**必须同步更新 README.md**：
-  - 新增/删除/变更 CLI 命令或 flag
-  - 新增/删除/变更 API 端点
-  - 配置项变更（config.yaml / rules.yaml 结构）
-  - 新增 expr 内置函数
-  - 部署方式变更（Dockerfile / Helm chart / CI）
-  - Make target 变更
-- README 中的示例代码和命令必须可直接复制运行
+- README.md is the project's public-facing entry document and must stay in sync with the code
+- Covers: project overview, features, quick start (install/run), configuration, rule authoring examples, deployment (Docker/Helm), dev guide (make commands), API endpoint list
+- Code changes **must** update README.md when:
+  - CLI commands or flags are added/removed/changed
+  - API endpoints are added/removed/changed
+  - Config structure changes (config.yaml / rules.yaml)
+  - New expr built-in functions are added
+  - Deployment changes (Dockerfile / Helm chart / CI)
+  - Make targets change
+- Example code and commands in README must be copy-paste runnable
 
 ## Don'ts
 
-- Expr 逻辑只在 engine 包，handler 不直接操作
-- 不绕过 Viper 读 env（不用 `os.Getenv`），不绕过 zap 打日志（不用 `fmt.Println`）
-- `/metrics`、`/swagger`、`/admin/*` 只在管理端口，不挂业务端口
-- `/admin/config` 不返回明文 secret
-- `docs/` 由 swag 生成，勿手动编辑
-- Helm chart 不 hardcode image tag，用 `{{ .Values.image.tag | default .Chart.AppVersion }}`
-- `.goreleaser.yaml` 不 hardcode 版本号
-- `tmp/` 不提交 git
-- RED 未确认前不写 `internal/` 下的非测试文件
-- 测试只用 `make test` / `make e2e`，不直接 `go test`
+- Expr logic belongs in the engine package only; handlers must not operate on expr directly
+- Do not bypass Viper to read env (no `os.Getenv`); do not bypass zap to log (no `fmt.Println`)
+- `/metrics`, `/swagger`, `/admin/*` only on admin port; never on business port
+- `/admin/config` must not return plaintext secrets
+- `docs/` is swag-generated; do not edit manually
+- Helm chart must not hardcode image tag; use `{{ .Values.image.tag | default .Chart.AppVersion }}`
+- `.goreleaser.yaml` must not hardcode version numbers
+- `tmp/` must not be committed to git
+- Do not write non-test files under `internal/` before RED phase is confirmed
+- Tests must only use `make test` / `make e2e`; do not run `go test` directly
