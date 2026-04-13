@@ -1,0 +1,24 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"HighMemoryUsage\"}",
+  "status": "firing",
+  "receiver": "webhook",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "HighMemoryUsage",
+        "severity": "critical",
+        "instance": "server-01",
+        "lark_bot_id": "abc-123-def"
+      },
+      "annotations": {
+        "summary": "Memory usage exceeds 90% on server-01",
+        "description": "Current memory usage is 95%"
+      },
+      "startsAt": "2024-01-15T10:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus:9090/graph"
+    }
+  ]
+}
