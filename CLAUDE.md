@@ -129,6 +129,18 @@ go run . validate --rules configs/rules.yaml
 - `make dev` = `air -c .air.toml`，监听 .go/.yaml，构建带 `-gcflags='all=-N -l'` 方便 debug
 - `.vscode/launch.json`：Launch 直接启动 + Attach to Air 进程。含 `GIN_MODE=debug`
 
+### README.md
+- README.md 是项目对外的入口文档，必须保持与代码同步
+- 内容包括：项目简介、功能特性、快速开始（安装/运行）、配置说明、规则编写示例、部署方式（Docker/Helm）、开发指南（make 命令）、API 端点列表
+- 代码变更涉及以下情况时**必须同步更新 README.md**：
+  - 新增/删除/变更 CLI 命令或 flag
+  - 新增/删除/变更 API 端点
+  - 配置项变更（config.yaml / rules.yaml 结构）
+  - 新增 expr 内置函数
+  - 部署方式变更（Dockerfile / Helm chart / CI）
+  - Make target 变更
+- README 中的示例代码和命令必须可直接复制运行
+
 ## Don'ts
 
 - Expr 逻辑只在 engine 包，handler 不直接操作
