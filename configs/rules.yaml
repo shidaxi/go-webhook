@@ -1,0 +1,31 @@
+rules:
+  - name: alertmanager-to-lark
+    match: 'len(payload.alerts) > 0'
+    target:
+      url: '"https://open.larksuite.com/open-apis/bot/v2/hook/" + payload.alerts[0].labels.lark_bot_id'
+      method: POST
+      timeout: 10s
+      headers:
+        Content-Type: application/json
+    body: |
+      {
+        "msg_type": "interactive",
+        "card": {
+          "header": {
+            "title": {
+              "content": (payload.alerts[0].status == "firing" ? "🔥 " : "✅ ") + payload.alerts[0].labels.alertname,
+              "tag": "plain_text"
+            },
+            "template": payload.alerts[0].status == "firing" ? "red" : "green"
+          },
+          "elements": [
+            {
+              "tag": "div",
+              "text": {
+                "content": "**Instance:** " + payload.alerts[0].labels.instance + "\n**Severity:** " + payload.alerts[0].labels.severity + "\n**Summary:** " + payload.alerts[0].annotations.summary,
+                "tag": "lark_md"
+              }
+            }
+          ]
+        }
+      }
