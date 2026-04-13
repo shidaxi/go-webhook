@@ -4,30 +4,30 @@ import "time"
 
 // AppConfig holds the top-level application configuration.
 type AppConfig struct {
-	Server ServerConfig `mapstructure:"server"`
-	Admin  AdminConfig  `mapstructure:"admin"`
-	Log    LogConfig    `mapstructure:"log"`
-	Rules  RulesConfig  `mapstructure:"rules"`
+	Server ServerConfig `mapstructure:"server" json:"server"`
+	Admin  AdminConfig  `mapstructure:"admin" json:"admin"`
+	Log    LogConfig    `mapstructure:"log" json:"log"`
+	Rules  RulesConfig  `mapstructure:"rules" json:"rules"`
 }
 
 // ServerConfig holds business server settings.
 type ServerConfig struct {
-	Port int `mapstructure:"port"`
+	Port int `mapstructure:"port" json:"port"`
 }
 
 // AdminConfig holds admin server settings.
 type AdminConfig struct {
-	Port int `mapstructure:"port"`
+	Port int `mapstructure:"port" json:"port"`
 }
 
 // LogConfig holds logging settings.
 type LogConfig struct {
-	Format string `mapstructure:"format"`
+	Format string `mapstructure:"format" json:"format"`
 }
 
 // RulesConfig holds rules file path.
 type RulesConfig struct {
-	Path string `mapstructure:"path"`
+	Path string `mapstructure:"path" json:"path"`
 }
 
 // RulesFile represents the top-level structure of rules.yaml.
