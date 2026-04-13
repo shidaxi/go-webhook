@@ -28,6 +28,11 @@ func (s *RuleStore) GetRules() []CompiledRule {
 	return s.rules.Load().([]CompiledRule)
 }
 
+// SetRules atomically replaces the current rule set with the given compiled rules.
+func (s *RuleStore) SetRules(rules []CompiledRule) {
+	s.rules.Store(rules)
+}
+
 // LoadAndCompile loads rules from file, compiles them, and atomically replaces
 // the current rule set. On file load failure, old rules are preserved.
 func (s *RuleStore) LoadAndCompile(path string) error {
