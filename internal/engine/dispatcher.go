@@ -7,14 +7,28 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/shidaxi/go-webhook/internal/config"
+	"github.com/shidaxi/go-webhook/internal/metrics"
 )
 
 // Dispatch sends an HTTP request with the given body to the target URL.
 // It retries on 5xx and network errors with exponential backoff.
-func Dispatch(ctx context.Context, targetURL, method string, body map[string]any, headers map[string]string, timeout time.Duration, maxRetries int) config.DispatchResult {
+func Dispatch(ctx context.Context, targetURL, method string, body map[string]any, headers map[string]string, timeout time.Duration, maxRetries int) (result config.DispatchResult) {
+	start := time.Now()
+	defer func() {
+		if result.RuleName != "" {
+			status := "error"
+			if result.StatusCode > 0 {
+				status = strconv.Itoa(result.StatusCode)
+			}
+			metrics.DispatchTotal.WithLabelValues(result.RuleName, targetURL, status).Inc()
+			metrics.DispatchDuration.WithLabelValues(result.RuleName).Observe(time.Since(start).Seconds())
+		}
+	}()
+
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return config.DispatchResult{
@@ -25,22 +39,21 @@ func Dispatch(ctx context.Context, targetURL, method string, body map[string]any
 
 	client := &http.Client{Timeout: timeout}
 
-	var lastResult config.DispatchResult
 	for attempt := range maxRetries {
-		lastResult = doRequest(ctx, client, targetURL, method, jsonBody, headers)
+		result = doRequest(ctx, client, targetURL, method, jsonBody, headers)
 
-		if lastResult.Success {
-			return lastResult
+		if result.Success {
+			return result
 		}
 
 		// Don't retry on 4xx (client errors) — only retry on 5xx or network errors
-		if lastResult.StatusCode >= 400 && lastResult.StatusCode < 500 {
-			return lastResult
+		if result.StatusCode >= 400 && result.StatusCode < 500 {
+			return result
 		}
 
 		// Don't retry if context is canceled
 		if ctx.Err() != nil {
-			return lastResult
+			return result
 		}
 
 		// Exponential backoff before next retry (skip sleep on last attempt)
@@ -49,13 +62,13 @@ func Dispatch(ctx context.Context, targetURL, method string, body map[string]any
 			select {
 			case <-time.After(backoff):
 			case <-ctx.Done():
-				lastResult.Error = ctx.Err()
-				return lastResult
+				result.Error = ctx.Err()
+				return result
 			}
 		}
 	}
 
-	return lastResult
+	return result
 }
 
 func doRequest(ctx context.Context, client *http.Client, targetURL, method string, jsonBody []byte, headers map[string]string) config.DispatchResult {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/shidaxi/go-webhook/internal/config"
+	"github.com/shidaxi/go-webhook/internal/metrics"
 )
 
 // RuleStore provides thread-safe access to compiled rules.
@@ -43,6 +44,7 @@ func (s *RuleStore) LoadAndCompile(path string) error {
 
 	compiled := CompileRules(rawRules)
 	s.rules.Store(compiled)
+	metrics.RulesLoaded.Set(float64(len(compiled)))
 	return nil
 }
 
