@@ -6,7 +6,7 @@
 
 ## Tech Stack
 
-Go 1.22+ | Gin | Cobra + Viper | expr-lang/expr | Zap | Prometheus | swaggo/swag + gin-swagger | testify | golangci-lint | Air (dev hot reload) | GoReleaser | Docker → ghcr.io | Helm chart → ghcr.io OCI
+Go 1.26+ | Gin | Cobra + Viper | expr-lang/expr | Zap | Prometheus | swaggo/swag + gin-swagger | testify | golangci-lint | Air (dev hot reload) | GoReleaser | Docker → ghcr.io | Helm chart → ghcr.io OCI
 
 ## Architecture
 
@@ -118,7 +118,7 @@ go run . validate --rules configs/rules.yaml
 
 ### CI/CD
 - Tag `v*` triggers GoReleaser → 4 binaries (darwin/linux × amd64/arm64) + Docker multi-arch + Helm chart → all pushed to ghcr.io
-- Dockerfile: `golang:1.22-alpine` build → `distroless/static-debian12` runtime
+- Dockerfile: `golang:1.26-alpine` build → `distroless/static-debian12` runtime
 
 ### Helm Chart
 - Source at `deploy/helm/go-webhook/`; CI auto-replaces Chart.yaml version/appVersion
