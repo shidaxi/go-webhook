@@ -1,0 +1,57 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/shidaxi/go-webhook
+  pullPolicy: IfNotPresent
+  tag: ""
+
+config:
+  server:
+    port: 8080
+  admin:
+    port: 9090
+  log:
+    format: json
+  rules:
+    path: /app/configs/rules.yaml
+
+rules: |
+  rules:
+    - name: alertmanager-to-lark
+      match: 'len(payload.alerts) > 0'
+      target:
+        url: '"https://open.larksuite.com/open-apis/bot/v2/hook/" + payload.alerts[0].labels.lark_bot_id'
+        method: POST
+        timeout: 10s
+      body: |
+        {
+          "msg_type": "interactive",
+          "card": {
+            "header": {
+              "title": {
+                "content": (payload.alerts[0].status == "firing" ? "🔥 " : "✅ ") + payload.alerts[0].labels.alertname,
+                "tag": "plain_text"
+              },
+              "template": payload.alerts[0].status == "firing" ? "red" : "green"
+            }
+          }
+        }
+
+service:
+  type: ClusterIP
+  port: 8080
+  adminPort: 9090
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 64Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80

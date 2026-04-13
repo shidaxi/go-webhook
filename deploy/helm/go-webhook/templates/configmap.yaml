@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "go-webhook.fullname" . }}
+  labels:
+    {{- include "go-webhook.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    server:
+      port: {{ .Values.config.server.port }}
+    admin:
+      port: {{ .Values.config.admin.port }}
+    log:
+      format: {{ .Values.config.log.format }}
+    rules:
+      path: {{ .Values.config.rules.path }}
+  rules.yaml: |
+    {{- .Values.rules | nindent 4 }}

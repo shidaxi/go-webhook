@@ -1,0 +1,63 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: .
+    binary: go-webhook
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+dockers:
+  - image_templates:
+      - "ghcr.io/shidaxi/go-webhook:{{ .Version }}-amd64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+    extra_files:
+      - configs/
+  - image_templates:
+      - "ghcr.io/shidaxi/go-webhook:{{ .Version }}-arm64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+    goarch: arm64
+    extra_files:
+      - configs/
+
+docker_manifests:
+  - name_template: "ghcr.io/shidaxi/go-webhook:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/shidaxi/go-webhook:{{ .Version }}-amd64"
+      - "ghcr.io/shidaxi/go-webhook:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/shidaxi/go-webhook:latest"
+    image_templates:
+      - "ghcr.io/shidaxi/go-webhook:{{ .Version }}-amd64"
+      - "ghcr.io/shidaxi/go-webhook:{{ .Version }}-arm64"
