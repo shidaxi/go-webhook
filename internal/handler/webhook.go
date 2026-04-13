@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shidaxi/go-webhook/internal/config"
@@ -62,8 +63,16 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 }
 
 func (h *WebhookHandler) processRules(c *gin.Context, payload map[string]any, rules []engine.CompiledRule) []config.DispatchResult {
-	var results []config.DispatchResult
+	// Phase 1: match and transform (cheap, sequential)
+	type dispatchJob struct {
+		ruleName  string
+		targetURL string
+		method    string
+		body      map[string]any
+		rule      config.Rule
+	}
 
+	var jobs []dispatchJob
 	for _, cr := range rules {
 		if cr.CompileError != nil {
 			continue
@@ -100,33 +109,57 @@ func (h *WebhookHandler) processRules(c *gin.Context, payload map[string]any, ru
 			continue
 		}
 
-		result := engine.Dispatch(
-			c.Request.Context(),
-			targetURL,
-			cr.Rule.Target.Method,
-			body,
-			cr.Rule.Target.Headers,
-			cr.Rule.Target.Timeout,
-			defaultMaxRetries,
-		)
-		result.RuleName = cr.Rule.Name
-
-		if result.Error != nil {
-			logger.L().Error("dispatch failed",
-				zap.String("rule", cr.Rule.Name),
-				zap.String("target", targetURL),
-				zap.Error(result.Error),
-			)
-		} else {
-			logger.L().Info("dispatch success",
-				zap.String("rule", cr.Rule.Name),
-				zap.String("target", targetURL),
-				zap.Int("status", result.StatusCode),
-			)
-		}
-
-		results = append(results, result)
+		jobs = append(jobs, dispatchJob{
+			ruleName:  cr.Rule.Name,
+			targetURL: targetURL,
+			method:    cr.Rule.Target.Method,
+			body:      body,
+			rule:      cr.Rule,
+		})
 	}
 
+	if len(jobs) == 0 {
+		return nil
+	}
+
+	// Phase 2: dispatch concurrently
+	results := make([]config.DispatchResult, len(jobs))
+	var wg sync.WaitGroup
+	wg.Add(len(jobs))
+
+	for i, job := range jobs {
+		go func(idx int, j dispatchJob) {
+			defer wg.Done()
+
+			result := engine.Dispatch(
+				c.Request.Context(),
+				j.targetURL,
+				j.method,
+				j.body,
+				j.rule.Target.Headers,
+				j.rule.Target.Timeout,
+				defaultMaxRetries,
+			)
+			result.RuleName = j.ruleName
+
+			if result.Error != nil {
+				logger.L().Error("dispatch failed",
+					zap.String("rule", j.ruleName),
+					zap.String("target", j.targetURL),
+					zap.Error(result.Error),
+				)
+			} else {
+				logger.L().Info("dispatch success",
+					zap.String("rule", j.ruleName),
+					zap.String("target", j.targetURL),
+					zap.Int("status", result.StatusCode),
+				)
+			}
+
+			results[idx] = result
+		}(i, job)
+	}
+
+	wg.Wait()
 	return results
 }

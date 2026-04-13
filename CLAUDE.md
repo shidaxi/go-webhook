@@ -55,6 +55,7 @@ go-webhook/
 make dev          # Air hot reload dev mode
 make test         # unit + integration tests (-v -race -coverprofile)
 make e2e          # E2E tests (-tags=e2e)
+make bench        # benchmark suite (-bench -benchmem -count=3 -cpu=1,4)
 make build        # build binary
 swag init -g main.go -o docs/   # regenerate Swagger docs
 go run . serve --config configs/config.yaml
@@ -103,6 +104,19 @@ go run . validate --rules configs/rules.yaml
 ### HTTP Forwarding
 - Default timeout 10s (overridable per rule), exponential backoff retry 3 times (5xx/network errors only)
 - Custom headers support `{{env.VAR}}` template
+
+### Concurrency
+- Rule matching and expr transformation are sequential (cheap, CPU-bound)
+- HTTP dispatch for matched rules runs **concurrently** via goroutines + sync.WaitGroup
+- Results are collected in a pre-allocated slice indexed by rule position (no mutex needed)
+- All shared counters in tests and handlers must use `sync/atomic` or pre-allocated indexed slices — never bare `++` under concurrency
+
+### Performance Testing
+- `make bench` runs benchmark suite: SingleRule, 10Rules (concurrent dispatch), NoMatch (fast path)
+- Benchmarks use `-bench=. -benchmem -count=3 -cpu=1,4` for reproducible multi-core results
+- Benchmark files live in `test/bench/`, separate from unit and E2E tests
+- When changing dispatch, matching, or transformation logic, run `make bench` before and after to verify no regression
+- Benchmark targets must use `httptest.NewServer` as mock target; do not hit external services
 
 ### TDD (ECC tdd-workflow)
 - New features and bug fixes **must** follow RED → GREEN → REFACTOR

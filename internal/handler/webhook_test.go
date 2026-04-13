@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shidaxi/go-webhook/internal/config"
@@ -122,9 +124,9 @@ func TestWebhookHandler_InvalidJSON(t *testing.T) {
 }
 
 func TestWebhookHandler_MultipleRulesMatch(t *testing.T) {
-	callCount := 0
+	var callCount atomic.Int32
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
+		callCount.Add(1)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer target.Close()
@@ -159,7 +161,55 @@ func TestWebhookHandler_MultipleRulesMatch(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, 2, callCount, "both matching rules should dispatch")
+	assert.Equal(t, int32(2), callCount.Load(), "both matching rules should dispatch")
+}
+
+func TestWebhookHandler_ConcurrentDispatch(t *testing.T) {
+	// Each handler sleeps 200ms; if dispatched concurrently, total < 300ms for 3 rules.
+	// If serial, would take >= 600ms.
+	var callCount atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.Add(1)
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+
+	rules := make([]config.Rule, 3)
+	for i := range rules {
+		rules[i] = config.Rule{
+			Name:  "slow-rule-" + string(rune('a'+i)),
+			Match: `true`,
+			Target: config.RuleTarget{
+				Method:  "POST",
+				Timeout: 5 * time.Second,
+			},
+			Body: `{"rule": "test"}`,
+		}
+	}
+
+	r, _ := setupWebhookHandler(t, rules, target)
+
+	body := []byte(`{"test": true}`)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	r.ServeHTTP(w, req)
+	elapsed := time.Since(start)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, int32(3), callCount.Load(), "all 3 rules should dispatch")
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, float64(3), resp["matched"])
+	assert.Equal(t, float64(3), resp["dispatched"])
+
+	// Concurrent dispatch: 3 x 200ms should complete in ~200ms, not 600ms
+	assert.Less(t, elapsed, 500*time.Millisecond,
+		"concurrent dispatch should complete in < 500ms, got %v", elapsed)
 }
 
 func TestWebhookHandler_AlertmanagerToLark(t *testing.T) {

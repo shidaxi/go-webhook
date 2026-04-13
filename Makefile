@@ -1,4 +1,4 @@
-.PHONY: build test e2e dev lint clean swagger
+.PHONY: build test e2e bench dev lint clean swagger
 
 BINARY := go-webhook
 COVERAGE := coverage.out
@@ -12,6 +12,9 @@ test:
 
 e2e:
 	go test ./test/e2e/... -v -race -tags=e2e -count=1
+
+bench:
+	go test ./test/bench/... -bench=. -benchmem -count=3 -run=^$$ -cpu=1,4
 
 dev:
 	air -c .air.toml

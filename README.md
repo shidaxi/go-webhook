@@ -226,6 +226,7 @@ Tag `v*` triggers GitHub Actions:
 make dev          # Hot reload dev server (Air)
 make test         # Unit + integration tests (-race -cover)
 make e2e          # E2E tests (-tags=e2e)
+make bench        # Benchmark suite (-benchmem -count=3 -cpu=1,4)
 make build        # Build binary
 make lint         # golangci-lint
 make swagger      # Regenerate Swagger docs
