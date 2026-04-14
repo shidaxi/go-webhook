@@ -19,8 +19,9 @@ func TestLoadRulesFromFile_Valid(t *testing.T) {
 	assert.Equal(t, "alertmanager-to-lark", r.Name)
 	assert.Equal(t, `len(payload.alerts) > 0`, r.Match)
 	assert.Equal(t, "POST", r.Target.Method)
-	assert.Contains(t, r.Target.URL, "lark_bot_id")
+	assert.Contains(t, r.Target.URL, "item")
 	assert.NotEmpty(t, r.Body)
+	assert.Equal(t, `split(payload.alerts[0].labels.lark_bot_id, ",")`, r.ForEach)
 }
 
 func TestLoadRulesFromFile_MultipleRules(t *testing.T) {

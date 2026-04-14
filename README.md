@@ -7,6 +7,7 @@ Configurable webhook forwarding engine. Receives JSON webhooks, matches against 
 - **Expression-based rule engine** — match, transform URL, and build request body using expr expressions
 - **Hot reload** — rules.yaml changes are picked up automatically via fsnotify (no restart needed)
 - **Dual-port architecture** — business port (`:8080`) for webhooks, admin port (`:9090`) for ops
+- **forEach fan-out** — split a field into multiple items and dispatch once per item (e.g. comma-separated bot IDs)
 - **Retry with backoff** — exponential backoff retry on 5xx / network errors (configurable per rule)
 - **Observability** — Prometheus metrics, structured JSON logging (Zap), Swagger UI
 - **Deployment ready** — Docker (distroless), Helm chart, GoReleaser, GitHub Actions CI/CD
@@ -75,8 +76,9 @@ Rules define how incoming webhooks are matched, transformed, and forwarded:
 rules:
   - name: alertmanager-to-lark
     match: 'len(payload.alerts) > 0'
+    forEach: 'split(payload.alerts[0].labels.lark_bot_id, ",")'
     target:
-      url: '"https://open.larksuite.com/open-apis/bot/v2/hook/" + payload.alerts[0].labels.lark_bot_id'
+      url: '"https://open.larksuite.com/open-apis/bot/v2/hook/" + item'
       method: POST
       timeout: 10s
       headers:
@@ -111,7 +113,8 @@ Each rule has:
 |-------|------|-------------|
 | `name` | string | Rule identifier |
 | `match` | expr (bool) | Expression evaluated against `payload`; rule fires when `true` |
-| `target.url` | expr (string) | Target URL expression |
+| `forEach` | expr (array) | *(optional)* Expression returning `[]any`; each element dispatched as `item` |
+| `target.url` | expr (string) | Target URL expression (can reference `item` when using forEach) |
 | `target.method` | string | HTTP method (default: `POST`) |
 | `target.timeout` | duration | Request timeout (default: `10s`) |
 | `target.headers` | map | Custom HTTP headers |
@@ -188,6 +191,38 @@ Response:
   ]
 }
 ```
+
+## Example: forEach Fan-Out
+
+When `lark_bot_id` contains comma-separated IDs (e.g. `"bot-1,bot-2,bot-3"`), the `forEach` field splits them and dispatches once per bot:
+
+```yaml
+rules:
+  - name: alertmanager-to-lark
+    match: 'len(payload.alerts) > 0'
+    forEach: 'split(payload.alerts[0].labels.lark_bot_id, ",")'
+    target:
+      url: '"https://open.larksuite.com/open-apis/bot/v2/hook/" + item'
+      method: POST
+    body: |
+      {"msg_type": "text", "content": {"text": payload.alerts[0].labels.alertname}}
+```
+
+Response with 3 bot IDs:
+
+```json
+{
+  "matched": 1,
+  "dispatched": 3,
+  "results": [
+    {"RuleName": "alertmanager-to-lark", "Success": true, "StatusCode": 200},
+    {"RuleName": "alertmanager-to-lark", "Success": true, "StatusCode": 200},
+    {"RuleName": "alertmanager-to-lark", "Success": true, "StatusCode": 200}
+  ]
+}
+```
+
+The `item` variable is available in both `target.url` and `body` expressions.
 
 ## Deployment
 

@@ -1,8 +1,9 @@
 rules:
   - name: alertmanager-to-lark
     match: 'len(payload.alerts) > 0'
+    forEach: 'split(payload.alerts[0].labels.lark_bot_id, ",")'
     target:
-      url: '"https://open.larksuite.com/open-apis/bot/v2/hook/" + payload.alerts[0].labels.lark_bot_id'
+      url: '"https://open.larksuite.com/open-apis/bot/v2/hook/" + item'
       method: POST
       timeout: 10s
       headers:

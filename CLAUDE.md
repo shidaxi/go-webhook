@@ -101,6 +101,14 @@ go run . validate --rules configs/rules.yaml
 - Compile at load time, only Run at runtime. Built-in functions: `now()`, `env()`, `lower()`, `upper()`, `join()`, `split()`
 - Evaluation errors must not panic; log and skip the rule
 
+### forEach Fan-Out
+- Rules support an optional `forEach` field: an expr expression that returns `[]any`
+- Each element is injected as `item` into URL and body expressions, producing one dispatch per item
+- Example: `forEach: 'split(payload.alerts[0].labels.lark_bot_id, ",")'` → one dispatch per comma-separated bot ID
+- URL/body expressions in a forEach rule can reference both `payload` and `item`
+- Compilation uses `CompileExprWithItem` (includes `item` in env) instead of `CompileExpr`
+- `processRules` returns `(matched, results)` — matched counts rules, results counts dispatches (which may be more due to fan-out)
+
 ### HTTP Forwarding
 - Default timeout 10s (overridable per rule), exponential backoff retry 3 times (5xx/network errors only)
 - Custom headers support `{{env.VAR}}` template
