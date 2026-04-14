@@ -22,7 +22,7 @@ rules:
             {
               "tag": "div",
               "text": {
-                "content": "**Instance:** " + payload.alerts[0].labels.instance + "\n**Severity:** " + payload.alerts[0].labels.severity + "\n**Summary:** " + payload.alerts[0].annotations.summary,
+                "content": "**Instance:** " + payload.alerts[0].labels.instance + "\n**Severity:** " + payload.alerts[0].labels.severity + "\n**Desc:** " + payload.alerts[0].annotations.description,
                 "tag": "lark_md"
               }
             }

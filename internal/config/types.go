@@ -37,10 +37,11 @@ type RulesFile struct {
 
 // Rule defines a single webhook forwarding rule.
 type Rule struct {
-	Name   string     `yaml:"name"`
-	Match  string     `yaml:"match"`
-	Target RuleTarget `yaml:"target"`
-	Body   string     `yaml:"body"`
+	Name    string     `yaml:"name"`
+	Match   string     `yaml:"match"`
+	ForEach string     `yaml:"forEach,omitempty"`
+	Target  RuleTarget `yaml:"target"`
+	Body    string     `yaml:"body"`
 }
 
 // RuleTarget defines the forwarding destination.

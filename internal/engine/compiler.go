@@ -9,11 +9,12 @@ import (
 
 // CompiledRule holds a rule with its pre-compiled expr programs.
 type CompiledRule struct {
-	Rule         config.Rule
-	MatchProgram *vm.Program
-	URLProgram   *vm.Program
-	BodyProgram  *vm.Program
-	CompileError error
+	Rule           config.Rule
+	MatchProgram   *vm.Program
+	ForEachProgram *vm.Program
+	URLProgram     *vm.Program
+	BodyProgram    *vm.Program
+	CompileError   error
 }
 
 // CompileRules compiles all rules' expr expressions.
@@ -32,7 +33,22 @@ func CompileRules(rules []config.Rule) []CompiledRule {
 		}
 		cr.MatchProgram = matchProg
 
-		urlProg, err := CompileExpr(r.Target.URL)
+		if r.ForEach != "" {
+			forEachProg, err := CompileExpr(r.ForEach)
+			if err != nil {
+				cr.CompileError = fmt.Errorf("rule %q forEach compile error: %w", r.Name, err)
+				compiled = append(compiled, cr)
+				continue
+			}
+			cr.ForEachProgram = forEachProg
+		}
+
+		compileExprFn := CompileExpr
+		if r.ForEach != "" {
+			compileExprFn = CompileExprWithItem
+		}
+
+		urlProg, err := compileExprFn(r.Target.URL)
 		if err != nil {
 			cr.CompileError = fmt.Errorf("rule %q URL compile error: %w", r.Name, err)
 			compiled = append(compiled, cr)
@@ -40,7 +56,7 @@ func CompileRules(rules []config.Rule) []CompiledRule {
 		}
 		cr.URLProgram = urlProg
 
-		bodyProg, err := CompileExpr(r.Body)
+		bodyProg, err := compileExprFn(r.Body)
 		if err != nil {
 			cr.CompileError = fmt.Errorf("rule %q body compile error: %w", r.Name, err)
 			compiled = append(compiled, cr)

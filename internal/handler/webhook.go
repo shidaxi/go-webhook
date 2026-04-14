@@ -44,12 +44,10 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 	}
 
 	rules := h.store.GetRules()
-	results := h.processRules(c, payload, rules)
+	matched, results := h.processRules(c, payload, rules)
 
-	matched := 0
 	dispatched := 0
 	for _, r := range results {
-		matched++
 		if r.Success {
 			dispatched++
 		}
@@ -62,23 +60,26 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 	})
 }
 
-func (h *WebhookHandler) processRules(c *gin.Context, payload map[string]any, rules []engine.CompiledRule) []config.DispatchResult {
-	// Phase 1: match and transform (cheap, sequential)
-	type dispatchJob struct {
-		ruleName  string
-		targetURL string
-		method    string
-		body      map[string]any
-		rule      config.Rule
-	}
+// dispatchJob holds all info needed to dispatch a single HTTP request.
+type dispatchJob struct {
+	ruleName  string
+	targetURL string
+	method    string
+	body      map[string]any
+	rule      config.Rule
+}
 
+func (h *WebhookHandler) processRules(c *gin.Context, payload map[string]any, rules []engine.CompiledRule) (int, []config.DispatchResult) {
+	// Phase 1: match, expand forEach, and transform (sequential)
 	var jobs []dispatchJob
+	matched := 0
+
 	for _, cr := range rules {
 		if cr.CompileError != nil {
 			continue
 		}
 
-		matched, err := engine.MatchRule(cr.MatchProgram, payload)
+		ok, err := engine.MatchRule(cr.MatchProgram, payload)
 		if err != nil {
 			logger.L().Warn("match evaluation failed",
 				zap.String("rule", cr.Rule.Name),
@@ -87,39 +88,18 @@ func (h *WebhookHandler) processRules(c *gin.Context, payload map[string]any, ru
 			continue
 		}
 
-		if !matched {
+		if !ok {
 			continue
 		}
 
-		targetURL, err := engine.TransformURL(cr.URLProgram, payload)
-		if err != nil {
-			logger.L().Error("URL transform failed",
-				zap.String("rule", cr.Rule.Name),
-				zap.Error(err),
-			)
-			continue
-		}
+		matched++
 
-		body, err := engine.TransformBody(cr.BodyProgram, payload)
-		if err != nil {
-			logger.L().Error("body transform failed",
-				zap.String("rule", cr.Rule.Name),
-				zap.Error(err),
-			)
-			continue
-		}
-
-		jobs = append(jobs, dispatchJob{
-			ruleName:  cr.Rule.Name,
-			targetURL: targetURL,
-			method:    cr.Rule.Target.Method,
-			body:      body,
-			rule:      cr.Rule,
-		})
+		ruleJobs := h.expandRule(cr, payload)
+		jobs = append(jobs, ruleJobs...)
 	}
 
 	if len(jobs) == 0 {
-		return nil
+		return matched, nil
 	}
 
 	// Phase 2: dispatch concurrently
@@ -161,5 +141,59 @@ func (h *WebhookHandler) processRules(c *gin.Context, payload map[string]any, ru
 	}
 
 	wg.Wait()
-	return results
+	return matched, results
+}
+
+// expandRule expands a single matched rule into one or more dispatch jobs.
+// If the rule has a forEach expression, it evaluates it and creates a job per item.
+// Otherwise, it creates a single job.
+func (h *WebhookHandler) expandRule(cr engine.CompiledRule, payload map[string]any) []dispatchJob {
+	if cr.ForEachProgram == nil {
+		return h.buildJob(cr, payload, nil)
+	}
+
+	items, err := engine.EvalForEach(cr.ForEachProgram, payload)
+	if err != nil {
+		logger.L().Error("forEach evaluation failed",
+			zap.String("rule", cr.Rule.Name),
+			zap.Error(err),
+		)
+		return nil
+	}
+
+	var jobs []dispatchJob
+	for _, item := range items {
+		itemJobs := h.buildJob(cr, payload, item)
+		jobs = append(jobs, itemJobs...)
+	}
+	return jobs
+}
+
+// buildJob transforms a single rule (with optional item) into dispatch jobs.
+func (h *WebhookHandler) buildJob(cr engine.CompiledRule, payload map[string]any, item any) []dispatchJob {
+	targetURL, err := engine.TransformURLWithItem(cr.URLProgram, payload, item)
+	if err != nil {
+		logger.L().Error("URL transform failed",
+			zap.String("rule", cr.Rule.Name),
+			zap.Error(err),
+		)
+		return nil
+	}
+
+	body, err := engine.TransformBodyWithItem(cr.BodyProgram, payload, item)
+	if err != nil {
+		logger.L().Error("body transform failed",
+			zap.String("rule", cr.Rule.Name),
+			zap.Error(err),
+		)
+		return nil
+	}
+
+	return []dispatchJob{{
+		ruleName:  cr.Rule.Name,
+		targetURL: targetURL,
+		method:    cr.Rule.Target.Method,
+		body:      body,
+		rule:      cr.Rule,
+	}}
 }
