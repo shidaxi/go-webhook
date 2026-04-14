@@ -117,6 +117,48 @@ func TestCompileRules_MixedValidInvalid(t *testing.T) {
 	assert.Error(t, compiled[1].CompileError, "second rule should fail")
 }
 
+func TestCompileRules_WithForEach(t *testing.T) {
+	rules := []config.Rule{
+		{
+			Name:    "fan-out",
+			Match:   `true`,
+			ForEach: `split(payload.ids, ",")`,
+			Target: config.RuleTarget{
+				URL:    `"https://example.com/" + item`,
+				Method: "POST",
+			},
+			Body: `{"id": item}`,
+		},
+	}
+
+	compiled := CompileRules(rules)
+	require.Len(t, compiled, 1)
+	assert.NoError(t, compiled[0].CompileError)
+	assert.NotNil(t, compiled[0].ForEachProgram)
+	assert.NotNil(t, compiled[0].URLProgram)
+	assert.NotNil(t, compiled[0].BodyProgram)
+}
+
+func TestCompileRules_InvalidForEach(t *testing.T) {
+	rules := []config.Rule{
+		{
+			Name:    "bad-foreach",
+			Match:   `true`,
+			ForEach: `broken !!!`,
+			Target: config.RuleTarget{
+				URL:    `"https://example.com"`,
+				Method: "POST",
+			},
+			Body: `{"ok": true}`,
+		},
+	}
+
+	compiled := CompileRules(rules)
+	require.Len(t, compiled, 1)
+	assert.Error(t, compiled[0].CompileError)
+	assert.Contains(t, compiled[0].CompileError.Error(), "forEach")
+}
+
 func TestCompileRules_Empty(t *testing.T) {
 	compiled := CompileRules(nil)
 	assert.Empty(t, compiled)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -269,4 +270,105 @@ func TestWebhookHandler_AlertmanagerToLark(t *testing.T) {
 	header := card["header"].(map[string]any)
 	title := header["title"].(map[string]any)
 	assert.Equal(t, "🔥 HighMemoryUsage", title["content"])
+}
+
+func TestWebhookHandler_ForEach_FanOut(t *testing.T) {
+	// forEach splits comma-separated IDs and dispatches once per item
+	var paths []string
+	var mu sync.Mutex
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+
+	rules := []config.Rule{
+		{
+			Name:    "fan-out-test",
+			Match:   `payload.ids != ""`,
+			ForEach: `split(payload.ids, ",")`,
+			Target: config.RuleTarget{
+				URL:     `"` + target.URL + `/hook/" + item`,
+				Method:  "POST",
+				Timeout: 5 * time.Second,
+			},
+			Body: `{"bot": item}`,
+		},
+	}
+
+	store := engine.NewRuleStore()
+	store.SetRules(engine.CompileRules(rules))
+	r := gin.New()
+	h := NewWebhookHandler(store)
+	r.POST("/webhook", h.Handle)
+
+	payload := map[string]any{"ids": "aaa,bbb,ccc"}
+	body, _ := json.Marshal(payload)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	// 1 rule matched, but expanded to 3 dispatches
+	assert.Equal(t, float64(1), resp["matched"])
+	assert.Equal(t, float64(3), resp["dispatched"])
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Len(t, paths, 3)
+	assert.Contains(t, paths, "/hook/aaa")
+	assert.Contains(t, paths, "/hook/bbb")
+	assert.Contains(t, paths, "/hook/ccc")
+}
+
+func TestWebhookHandler_ForEach_SingleItem(t *testing.T) {
+	var capturedBody map[string]any
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedBody)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+
+	rules := []config.Rule{
+		{
+			Name:    "single-item",
+			Match:   `true`,
+			ForEach: `split(payload.id, ",")`,
+			Target: config.RuleTarget{
+				URL:     `"` + target.URL + `"`,
+				Method:  "POST",
+				Timeout: 5 * time.Second,
+			},
+			Body: `{"bot": item}`,
+		},
+	}
+
+	store := engine.NewRuleStore()
+	store.SetRules(engine.CompileRules(rules))
+	r := gin.New()
+	h := NewWebhookHandler(store)
+	r.POST("/webhook", h.Handle)
+
+	payload := map[string]any{"id": "only-one"}
+	body, _ := json.Marshal(payload)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, float64(1), resp["matched"])
+	assert.Equal(t, float64(1), resp["dispatched"])
+	assert.Equal(t, "only-one", capturedBody["bot"])
 }
